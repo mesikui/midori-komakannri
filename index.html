@@ -1,3 +1,6 @@
+
+raw
+Koma kanri · HTML
 <!DOCTYPE html>
 <html lang="ja">
 <head>
@@ -72,6 +75,11 @@
   .toast.error { border-color: var(--borrowed); color: var(--borrowed); }
   .toast.info { border-color: var(--accent); color: var(--accent); }
   #loading { text-align: center; padding: 40px; color: var(--text-dim); font-family: 'Share Tech Mono', monospace; letter-spacing: 0.2em; }
+  .himo-btn { flex: 1; padding: 10px; }
+  .himo-btn.active { border-color: var(--accent); color: var(--accent); background: rgba(0,229,255,0.1); }
+  .himo-tag { font-size: 0.6rem; padding: 1px 6px; border-radius: 10px; margin-top: 3px; display: inline-block; }
+  .himo-on { background: rgba(255,107,53,0.2); color: var(--accent2); }
+  .himo-off { background: rgba(122,127,148,0.15); color: var(--text-dim); }
 </style>
 </head>
 <body>
@@ -92,19 +100,24 @@
   <div id="loading">接続中...</div>
   <div class="grid" id="grid"></div>
 </div>
-
+ 
 <div class="modal-overlay" id="borrow-modal">
   <div class="modal">
     <h2 id="modal-title">No.X を借りる</h2>
     <p>お名前を入力してください</p>
     <input type="text" id="borrow-name" placeholder="名前" maxlength="20" />
+    <p style="margin-bottom:10px;">紐は必要ですか？</p>
+    <div style="display:flex;gap:10px;margin-bottom:14px;">
+      <button class="btn himo-btn active" id="himo-yes" onclick="selectHimo(true)">紐あり</button>
+      <button class="btn himo-btn" id="himo-no" onclick="selectHimo(false)">紐なし</button>
+    </div>
     <div class="modal-btns">
       <button class="btn" onclick="closeModal()">キャンセル</button>
       <button class="btn btn-confirm" onclick="confirmBorrow()">借りる</button>
     </div>
   </div>
 </div>
-
+ 
 <div class="modal-overlay" id="pw-modal">
   <div class="modal">
     <h2>管理者ログイン</h2>
@@ -116,7 +129,7 @@
     </div>
   </div>
 </div>
-
+ 
 <div class="modal-overlay" id="return-modal">
   <div class="modal">
     <h2 id="return-title">No.X を返却</h2>
@@ -127,13 +140,13 @@
     </div>
   </div>
 </div>
-
+ 
 <div class="toast" id="toast"></div>
-
+ 
 <script type="module">
   import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
   import { getDatabase, ref, onValue, set, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
-
+ 
   const firebaseConfig = {
     apiKey: "AIzaSyBd7L0VpdHaSEnd3FMsku9ARSFaA3fdhhA",
     authDomain: "midori-komakanri.firebaseapp.com",
@@ -143,22 +156,23 @@
     messagingSenderId: "244556501415",
     appId: "1:244556501415:web:44c43bcb36789b42a92682"
   };
-
+ 
   const app = initializeApp(firebaseConfig);
   const db = getDatabase(app);
-
+ 
   const ADMIN_PW = 'admin123';
   let isAdmin = false;
   let selectedKoma = null;
+  let selectedHimo = true;
   let data = {};
-
+ 
   const komaRef = ref(db, 'koma');
   onValue(komaRef, (snapshot) => {
     data = snapshot.val() || {};
     document.getElementById('loading').style.display = 'none';
     renderGrid();
   });
-
+ 
   function renderGrid() {
     const grid = document.getElementById('grid');
     grid.innerHTML = '';
@@ -181,19 +195,22 @@
     document.getElementById('stat-available').textContent = available;
     document.getElementById('stat-borrowed').textContent = borrowed;
   }
-
+ 
   function escHtml(s) {
     return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
   }
-
+ 
   function openBorrowModal(num) {
     selectedKoma = num;
     document.getElementById('modal-title').textContent = `No.${num} を借りる`;
     document.getElementById('borrow-name').value = '';
+    selectedHimo = true;
+    document.getElementById('himo-yes').classList.add('active');
+    document.getElementById('himo-no').classList.remove('active');
     document.getElementById('borrow-modal').classList.add('show');
     setTimeout(() => document.getElementById('borrow-name').focus(), 100);
   }
-
+ 
   function openReturnModal(num) {
     selectedKoma = num;
     const k = data[num];
@@ -201,27 +218,27 @@
     document.getElementById('return-desc').textContent = `${k.name} さん（${k.time} 借出）を返却しますか？`;
     document.getElementById('return-modal').classList.add('show');
   }
-
+ 
   window.closeModal = () => document.getElementById('borrow-modal').classList.remove('show');
   window.closeReturnModal = () => document.getElementById('return-modal').classList.remove('show');
   window.closePwModal = () => document.getElementById('pw-modal').classList.remove('show');
-
+ 
   window.confirmBorrow = async () => {
     const name = document.getElementById('borrow-name').value.trim();
     if (!name) { showToast('名前を入力してください', 'error'); return; }
     const now = new Date();
     const time = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
-    await set(ref(db, `koma/${selectedKoma}`), { name, time });
+    await set(ref(db, `koma/${selectedKoma}`), { name, time, himo: selectedHimo });
     window.closeModal();
     showToast(`No.${selectedKoma} を貸し出しました`, 'success');
   };
-
+ 
   window.confirmReturn = async () => {
     await remove(ref(db, `koma/${selectedKoma}`));
     window.closeReturnModal();
     showToast(`No.${selectedKoma} を返却しました`, 'info');
   };
-
+ 
   window.toggleAdmin = () => {
     if (isAdmin) {
       isAdmin = false;
@@ -236,7 +253,7 @@
       setTimeout(() => document.getElementById('pw-input').focus(), 100);
     }
   };
-
+ 
   window.confirmAdmin = () => {
     const pw = document.getElementById('pw-input').value;
     if (pw === ADMIN_PW) {
@@ -252,7 +269,7 @@
       document.getElementById('pw-input').value = '';
     }
   };
-
+ 
   let toastTimer;
   function showToast(msg, type = 'info') {
     const t = document.getElementById('toast');
@@ -261,9 +278,16 @@
     clearTimeout(toastTimer);
     toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
   }
-
+ 
+  window.selectHimo = (val) => {
+    selectedHimo = val;
+    document.getElementById('himo-yes').classList.toggle('active', val);
+    document.getElementById('himo-no').classList.toggle('active', !val);
+  };
+ 
   document.getElementById('borrow-name').addEventListener('keydown', e => { if (e.key === 'Enter') window.confirmBorrow(); });
   document.getElementById('pw-input').addEventListener('keydown', e => { if (e.key === 'Enter') window.confirmAdmin(); });
 </script>
 </body>
 </html>
+ 
