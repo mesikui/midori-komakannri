@@ -1,0 +1,269 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>コマ貸出管理</title>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Zen+Kaku+Gothic+New:wght@400;700;900&family=Share+Tech+Mono&display=swap');
+  :root {
+    --bg: #0f1117; --surface: #1a1d27; --surface2: #22263a;
+    --accent: #00e5ff; --accent2: #ff6b35;
+    --available: #00c853; --borrowed: #ff3d57;
+    --text: #e8eaf0; --text-dim: #7a7f94; --border: #2e3350;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Zen Kaku Gothic New', sans-serif; min-height: 100vh; padding: 20px; }
+  body::before {
+    content: ''; position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: radial-gradient(ellipse at 20% 10%, rgba(0,229,255,0.07) 0%, transparent 50%),
+                radial-gradient(ellipse at 80% 90%, rgba(255,107,53,0.05) 0%, transparent 50%);
+    pointer-events: none; z-index: 0;
+  }
+  .wrapper { max-width: 900px; margin: 0 auto; position: relative; z-index: 1; }
+  header { text-align: center; padding: 30px 0 24px; border-bottom: 1px solid var(--border); margin-bottom: 24px; }
+  header h1 { font-size: 2rem; font-weight: 900; letter-spacing: 0.15em; color: var(--accent); text-shadow: 0 0 20px rgba(0,229,255,0.4); }
+  header p { font-family: 'Share Tech Mono', monospace; color: var(--text-dim); font-size: 0.75rem; margin-top: 6px; letter-spacing: 0.2em; }
+  .stats { display: flex; gap: 12px; margin-bottom: 20px; flex-wrap: wrap; }
+  .stat-card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 12px 20px; flex: 1; min-width: 120px; text-align: center; }
+  .stat-card .num { font-size: 1.8rem; font-weight: 900; font-family: 'Share Tech Mono', monospace; }
+  .stat-card .label { font-size: 0.7rem; color: var(--text-dim); letter-spacing: 0.1em; margin-top: 2px; }
+  .stat-available .num { color: var(--available); text-shadow: 0 0 10px rgba(0,200,83,0.4); }
+  .stat-borrowed .num { color: var(--borrowed); text-shadow: 0 0 10px rgba(255,61,87,0.4); }
+  .stat-total .num { color: var(--accent); }
+  .admin-bar { display: flex; align-items: center; justify-content: flex-end; gap: 10px; margin-bottom: 20px; }
+  .admin-status { font-family: 'Share Tech Mono', monospace; font-size: 0.75rem; letter-spacing: 0.1em; }
+  .admin-status.on { color: var(--accent2); }
+  .admin-status.off { color: var(--text-dim); }
+  .btn { background: transparent; border: 1px solid var(--border); color: var(--text); padding: 8px 16px; border-radius: 6px; font-family: 'Zen Kaku Gothic New', sans-serif; font-size: 0.8rem; cursor: pointer; transition: all 0.2s; letter-spacing: 0.05em; }
+  .btn:hover { border-color: var(--accent); color: var(--accent); }
+  .btn.danger { border-color: var(--borrowed); color: var(--borrowed); background: rgba(255,61,87,0.05); }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; margin-bottom: 30px; }
+  .koma-card { background: var(--surface); border: 1px solid var(--border); border-radius: 10px; padding: 14px 10px; text-align: center; cursor: pointer; transition: all 0.2s; }
+  .koma-card:hover { transform: translateY(-2px); box-shadow: 0 6px 20px rgba(0,0,0,0.3); }
+  .koma-card.available { border-color: rgba(0,200,83,0.3); }
+  .koma-card.available:hover { border-color: var(--available); box-shadow: 0 4px 20px rgba(0,200,83,0.15); }
+  .koma-card.borrowed { border-color: rgba(255,61,87,0.4); background: rgba(255,61,87,0.06); cursor: default; }
+  .koma-card.borrowed.admin-mode { cursor: pointer; }
+  .koma-card.borrowed.admin-mode:hover { border-color: var(--borrowed); box-shadow: 0 4px 20px rgba(255,61,87,0.2); }
+  .koma-num { font-family: 'Share Tech Mono', monospace; font-size: 1.3rem; font-weight: bold; margin-bottom: 6px; }
+  .koma-card.available .koma-num { color: var(--available); }
+  .koma-card.borrowed .koma-num { color: var(--borrowed); }
+  .koma-badge { font-size: 0.65rem; letter-spacing: 0.1em; padding: 2px 8px; border-radius: 20px; display: inline-block; margin-bottom: 4px; }
+  .badge-available { background: rgba(0,200,83,0.15); color: var(--available); }
+  .badge-borrowed { background: rgba(255,61,87,0.15); color: var(--borrowed); }
+  .koma-name { font-size: 0.75rem; color: var(--text); margin-top: 4px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+  .koma-time { font-size: 0.65rem; color: var(--text-dim); font-family: 'Share Tech Mono', monospace; margin-top: 2px; }
+  .modal-overlay { display: none; position: fixed; top: 0; left: 0; right: 0; bottom: 0; background: rgba(0,0,0,0.7); backdrop-filter: blur(4px); z-index: 100; align-items: center; justify-content: center; }
+  .modal-overlay.show { display: flex; }
+  .modal { background: var(--surface); border: 1px solid var(--border); border-radius: 14px; padding: 30px; width: 320px; max-width: 90vw; box-shadow: 0 20px 60px rgba(0,0,0,0.5); animation: pop 0.2s ease; }
+  @keyframes pop { from { transform: scale(0.9); opacity: 0; } to { transform: scale(1); opacity: 1; } }
+  .modal h2 { font-size: 1.1rem; margin-bottom: 6px; color: var(--accent); }
+  .modal p { font-size: 0.8rem; color: var(--text-dim); margin-bottom: 20px; }
+  .modal input { width: 100%; background: var(--bg); border: 1px solid var(--border); border-radius: 8px; color: var(--text); padding: 10px 14px; font-family: 'Zen Kaku Gothic New', sans-serif; font-size: 0.9rem; outline: none; transition: border-color 0.2s; margin-bottom: 14px; }
+  .modal input:focus { border-color: var(--accent); }
+  .modal-btns { display: flex; gap: 10px; }
+  .modal-btns .btn { flex: 1; padding: 10px; }
+  .btn-confirm { background: rgba(0,229,255,0.1); border-color: var(--accent); color: var(--accent); }
+  .btn-confirm:hover { background: rgba(0,229,255,0.2); }
+  .toast { position: fixed; bottom: 30px; left: 50%; transform: translateX(-50%) translateY(80px); background: var(--surface2); border: 1px solid var(--border); border-radius: 8px; padding: 12px 24px; font-size: 0.85rem; z-index: 200; transition: transform 0.3s ease; letter-spacing: 0.05em; }
+  .toast.show { transform: translateX(-50%) translateY(0); }
+  .toast.success { border-color: var(--available); color: var(--available); }
+  .toast.error { border-color: var(--borrowed); color: var(--borrowed); }
+  .toast.info { border-color: var(--accent); color: var(--accent); }
+  #loading { text-align: center; padding: 40px; color: var(--text-dim); font-family: 'Share Tech Mono', monospace; letter-spacing: 0.2em; }
+</style>
+</head>
+<body>
+<div class="wrapper">
+  <header>
+    <h1>コマ 貸出管理</h1>
+    <p>NO.1 — 55 ／ RENTAL MANAGEMENT SYSTEM</p>
+  </header>
+  <div class="stats">
+    <div class="stat-card stat-available"><div class="num" id="stat-available">—</div><div class="label">空き</div></div>
+    <div class="stat-card stat-borrowed"><div class="num" id="stat-borrowed">—</div><div class="label">貸出中</div></div>
+    <div class="stat-card stat-total"><div class="num">55</div><div class="label">合計</div></div>
+  </div>
+  <div class="admin-bar">
+    <span class="admin-status off" id="admin-status">一般モード</span>
+    <button class="btn" id="admin-btn" onclick="toggleAdmin()">管理者ログイン</button>
+  </div>
+  <div id="loading">接続中...</div>
+  <div class="grid" id="grid"></div>
+</div>
+
+<div class="modal-overlay" id="borrow-modal">
+  <div class="modal">
+    <h2 id="modal-title">No.X を借りる</h2>
+    <p>お名前を入力してください</p>
+    <input type="text" id="borrow-name" placeholder="名前" maxlength="20" />
+    <div class="modal-btns">
+      <button class="btn" onclick="closeModal()">キャンセル</button>
+      <button class="btn btn-confirm" onclick="confirmBorrow()">借りる</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="pw-modal">
+  <div class="modal">
+    <h2>管理者ログイン</h2>
+    <p>パスワードを入力してください</p>
+    <input type="password" id="pw-input" placeholder="パスワード" />
+    <div class="modal-btns">
+      <button class="btn" onclick="closePwModal()">キャンセル</button>
+      <button class="btn btn-confirm" onclick="confirmAdmin()">ログイン</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal-overlay" id="return-modal">
+  <div class="modal">
+    <h2 id="return-title">No.X を返却</h2>
+    <p id="return-desc"></p>
+    <div class="modal-btns">
+      <button class="btn" onclick="closeReturnModal()">キャンセル</button>
+      <button class="btn danger" onclick="confirmReturn()">返却する</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-app.js";
+  import { getDatabase, ref, onValue, set, remove } from "https://www.gstatic.com/firebasejs/10.12.0/firebase-database.js";
+
+  const firebaseConfig = {
+    apiKey: "AIzaSyBd7L0VpdHaSEnd3FMsku9ARSFaA3fdhhA",
+    authDomain: "midori-komakanri.firebaseapp.com",
+    databaseURL: "https://midori-komakanri-default-rtdb.firebaseio.com",
+    projectId: "midori-komakanri",
+    storageBucket: "midori-komakanri.firebasestorage.app",
+    messagingSenderId: "244556501415",
+    appId: "1:244556501415:web:44c43bcb36789b42a92682"
+  };
+
+  const app = initializeApp(firebaseConfig);
+  const db = getDatabase(app);
+
+  const ADMIN_PW = 'admin123';
+  let isAdmin = false;
+  let selectedKoma = null;
+  let data = {};
+
+  const komaRef = ref(db, 'koma');
+  onValue(komaRef, (snapshot) => {
+    data = snapshot.val() || {};
+    document.getElementById('loading').style.display = 'none';
+    renderGrid();
+  });
+
+  function renderGrid() {
+    const grid = document.getElementById('grid');
+    grid.innerHTML = '';
+    let available = 0, borrowed = 0;
+    for (let i = 1; i <= 55; i++) {
+      const k = data[i];
+      const card = document.createElement('div');
+      card.className = 'koma-card ' + (k ? 'borrowed' : 'available');
+      if (k && isAdmin) card.classList.add('admin-mode');
+      card.innerHTML = `
+        <div class="koma-num">No.${i}</div>
+        <div class="koma-badge ${k ? 'badge-borrowed' : 'badge-available'}">${k ? '貸出中' : '空き'}</div>
+        ${k ? `<div class="koma-name">${escHtml(k.name)}</div><div class="koma-time">${k.time}</div>` : ''}
+      `;
+      if (!k) card.onclick = () => openBorrowModal(i);
+      else if (isAdmin) card.onclick = () => openReturnModal(i);
+      grid.appendChild(card);
+      k ? borrowed++ : available++;
+    }
+    document.getElementById('stat-available').textContent = available;
+    document.getElementById('stat-borrowed').textContent = borrowed;
+  }
+
+  function escHtml(s) {
+    return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+  }
+
+  function openBorrowModal(num) {
+    selectedKoma = num;
+    document.getElementById('modal-title').textContent = `No.${num} を借りる`;
+    document.getElementById('borrow-name').value = '';
+    document.getElementById('borrow-modal').classList.add('show');
+    setTimeout(() => document.getElementById('borrow-name').focus(), 100);
+  }
+
+  function openReturnModal(num) {
+    selectedKoma = num;
+    const k = data[num];
+    document.getElementById('return-title').textContent = `No.${num} を返却`;
+    document.getElementById('return-desc').textContent = `${k.name} さん（${k.time} 借出）を返却しますか？`;
+    document.getElementById('return-modal').classList.add('show');
+  }
+
+  window.closeModal = () => document.getElementById('borrow-modal').classList.remove('show');
+  window.closeReturnModal = () => document.getElementById('return-modal').classList.remove('show');
+  window.closePwModal = () => document.getElementById('pw-modal').classList.remove('show');
+
+  window.confirmBorrow = async () => {
+    const name = document.getElementById('borrow-name').value.trim();
+    if (!name) { showToast('名前を入力してください', 'error'); return; }
+    const now = new Date();
+    const time = now.getHours().toString().padStart(2,'0') + ':' + now.getMinutes().toString().padStart(2,'0');
+    await set(ref(db, `koma/${selectedKoma}`), { name, time });
+    window.closeModal();
+    showToast(`No.${selectedKoma} を貸し出しました`, 'success');
+  };
+
+  window.confirmReturn = async () => {
+    await remove(ref(db, `koma/${selectedKoma}`));
+    window.closeReturnModal();
+    showToast(`No.${selectedKoma} を返却しました`, 'info');
+  };
+
+  window.toggleAdmin = () => {
+    if (isAdmin) {
+      isAdmin = false;
+      document.getElementById('admin-status').textContent = '一般モード';
+      document.getElementById('admin-status').className = 'admin-status off';
+      document.getElementById('admin-btn').textContent = '管理者ログイン';
+      renderGrid();
+      showToast('ログアウトしました', 'info');
+    } else {
+      document.getElementById('pw-input').value = '';
+      document.getElementById('pw-modal').classList.add('show');
+      setTimeout(() => document.getElementById('pw-input').focus(), 100);
+    }
+  };
+
+  window.confirmAdmin = () => {
+    const pw = document.getElementById('pw-input').value;
+    if (pw === ADMIN_PW) {
+      isAdmin = true;
+      document.getElementById('admin-status').textContent = '管理者モード';
+      document.getElementById('admin-status').className = 'admin-status on';
+      document.getElementById('admin-btn').textContent = 'ログアウト';
+      window.closePwModal();
+      renderGrid();
+      showToast('管理者モードになりました', 'success');
+    } else {
+      showToast('パスワードが違います', 'error');
+      document.getElementById('pw-input').value = '';
+    }
+  };
+
+  let toastTimer;
+  function showToast(msg, type = 'info') {
+    const t = document.getElementById('toast');
+    t.textContent = msg;
+    t.className = `toast ${type} show`;
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => t.classList.remove('show'), 2500);
+  }
+
+  document.getElementById('borrow-name').addEventListener('keydown', e => { if (e.key === 'Enter') window.confirmBorrow(); });
+  document.getElementById('pw-input').addEventListener('keydown', e => { if (e.key === 'Enter') window.confirmAdmin(); });
+</script>
+</body>
+</html>
